@@ -466,7 +466,7 @@ function App() {
 	async function initCallee(cube) {
 		if (!joinAllowed) return
 
-		const stream = cube.userData;
+		const stream = cube.userData
 
 		// Call the joinStream function in the smart contract to join the stream
 		// const binanceAPIURL = 'https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT';
@@ -478,7 +478,7 @@ function App() {
 			.joinStream(stream.StreamID)
 			.send({ from: account, value: 29815146094215865, gas: 260000 })
 
-		initCaller()
+		console.log('joinedStream')
 
 		scene.moveCamera()
 
