@@ -9,12 +9,16 @@ const screenEl = document.querySelector('#screen')
 
 function Scene({ joinStream }) {
 	const params = {
-		bloomStrength: 1.5,
+		bloomStrength: 1,
 		bloomThreshold: 0,
 		bloomRadius: 0.3,
 	}
 
-	const BLOOM_SCENE = 1
+	const ENTIRE_SCENE = 0,
+		BLOOM_SCENE = 1
+
+	const darkMaterial = new THREE.MeshBasicMaterial({ color: 'black' })
+	const materials = {}
 
 	const bloomLayer = new THREE.Layers()
 	bloomLayer.set(BLOOM_SCENE)
@@ -28,12 +32,7 @@ function Scene({ joinStream }) {
 	const scene = new THREE.Scene()
 	scene.fog = new THREE.Fog(fogColor, 0.1, 15)
 
-	const directionalLight = new THREE.DirectionalLight('#ffffff', 1)
-	directionalLight.position.set(1, 1, 0)
-	directionalLight.lookAt(new THREE.Vector3())
-	scene.add(directionalLight)
-
-	const ambientLight = new THREE.AmbientLight('#fcf98b', 2)
+	const ambientLight = new THREE.AmbientLight( 0x404040 )
 	scene.add(ambientLight)
 
 	const videoTexture = new THREE.VideoTexture(screenEl)
@@ -69,6 +68,8 @@ function Scene({ joinStream }) {
 
 		bloomComposer.setSize(sizes.width, sizes.height)
 		finalComposer.setSize(sizes.width, sizes.height)
+
+		// render();
 	})
 
 	function onPointerDown(event) {
@@ -95,7 +96,7 @@ function Scene({ joinStream }) {
 		0.1,
 		100
 	)
-	camera.position.set(0, 0.5, 2)
+	camera.position.set(0, 0.35, 2)
 	camera.lookAt
 	scene.add(camera)
 
@@ -114,12 +115,12 @@ function Scene({ joinStream }) {
 		canvas: canvas,
 		antialias: true,
 	})
-	// renderer.shadowMap = true
+	// renderer.toneMapping = THREE.srg;
 	renderer.setClearColor(fogColor)
 	renderer.setSize(sizes.width, sizes.height)
 	renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-	const renderScene = new RenderPass(scene, camera)
+	const renderScene = new RenderPass( scene, camera );
 
 	const bloomPass = new UnrealBloomPass(
 		new THREE.Vector2(sizes.width, sizes.height),
@@ -133,7 +134,7 @@ function Scene({ joinStream }) {
 	bloomPass.radius = params.bloomRadius
 
 	const bloomComposer = new EffectComposer(renderer)
-	bloomComposer.renderToScreen = true
+	bloomComposer.renderToScreen = false;
 	bloomComposer.addPass(renderScene)
 	bloomComposer.addPass(bloomPass)
 
@@ -176,9 +177,17 @@ function Scene({ joinStream }) {
 	finalComposer.addPass(renderScene)
 	finalComposer.addPass(finalPass)
 
+	function render() {
+		// render scene with bloom
+		renderBloom(true)
+
+		// render the entire scene, then render bloom scene on top
+		finalComposer.render()
+	}
+
 	function initCubes(streams) {
 		const numOfCubes = streams.length
-		const columns = 3
+		const columns = 5
 
 		const cubeGeometry = new THREE.BoxGeometry(0.25, 0.25, 0.25)
 
@@ -199,13 +208,13 @@ function Scene({ joinStream }) {
 
 			color.setHSL(Math.random(), 1, Math.random() * 0.2 + 0.05)
 
-			const cubeMaterial = new THREE.MeshStandardMaterial({
+			const cubeMaterial = new THREE.MeshBasicMaterial({
 				color: color,
 			})
 
 			const cube = new THREE.Mesh(cubeGeometry, cubeMaterial)
 			cube.position.set(coords.x, coords.y, coords.z)
-			cube.layers.toggle(BLOOM_SCENE)
+			cube.layers.enable(BLOOM_SCENE)
 			cube.userData = stream
 			scene.add(cube)
 		}
@@ -251,31 +260,41 @@ function Scene({ joinStream }) {
 		// Update controls
 		controls.update()
 
-		// Render
-		renderer.render(scene, camera)
-		// bloomComposer.render()
-		// finalComposer.render()
+		// // Render
+		// renderer.render(scene, camera)
+		// // bloomComposer.render();
+
+		render();
 
 		// Call tick again on the next frame
 		window.requestAnimationFrame(tick)
 	}
 
-	cinema = initCinema()
-	// initCubes()
+	function renderBloom(mask) {
+		if (mask === true) {
+			scene.traverse(darkenNonBloomed)
+			bloomComposer.render()
+			scene.traverse(restoreMaterial)
+		} else {
+			camera.layers.set(BLOOM_SCENE)
+			bloomComposer.render()
+			camera.layers.set(ENTIRE_SCENE)
+		}
+	}
 
-	// bloomComposer.render()
-	// scene.traverse(darkenNonBloomed)
+	function darkenNonBloomed(obj) {
+		if (obj.isMesh && bloomLayer.test(obj.layers) === false) {
+			materials[obj.uuid] = obj.material
+			obj.material = darkMaterial
+		}
+	}
 
-	// function darkenNonBloomed(obj) {
-	// 	if (obj.isMesh && bloomLayer.test(obj.layers) === false) {
-	// 		obj.material = darkMaterial
-	// 	}
-	// }
-
-	tick()
-
-	// const helper = new THREE.CameraHelper(camera)
-	// scene.add(helper)
+	function restoreMaterial(obj) {
+		if (materials[obj.uuid]) {
+			obj.material = materials[obj.uuid]
+			delete materials[obj.uuid]
+		}
+	}
 
 	function moveCamera() {
 		const vector = new THREE.Vector3(0, -4.5, 0)
@@ -293,9 +312,11 @@ function Scene({ joinStream }) {
 		})
 
 		controls.update()
-
-		// bloomComposer.enabled = false
 	}
+
+	cinema = initCinema()
+
+	tick()
 
 	return {
 		createStream() {
@@ -368,9 +389,9 @@ function App() {
 
 		hideButtons()
 
-		const resp = await liveStreamingContract.methods
-			.createStream(fee)
-			.send({ from: account })
+		// const resp = await liveStreamingContract.methods
+		// 	.createStream(fee)
+		// 	.send({ from: account })
 
 		initCaller()
 	})
